@@ -1,44 +1,34 @@
-
+#!/usr/bin/env python3
 import random
 from collections import deque
 
-# --- Clases Base: Vertex, Edge, Graph, AVL ---
+# ------------------- Clases Base -------------------
 
 class Vertex:
     __slots__ = ('_element', 'is_warehouse', 'is_client', 'is_recharge')
-
     def __init__(self, element):
         self._element = element
         self.is_warehouse = element.get('almacen', False)
         self.is_client = element.get('cliente', False)
         self.is_recharge = element.get('estacion', False)
-
     def element(self):
         return self._element
-
     def __hash__(self):
         return hash(id(self))
-
     def __str__(self):
         return str(self._element['id'])
 
 class Edge:
-    __slots__ = ('_origin', '_destination', '_cost')
-
     def __init__(self, u, v, cost):
         self._origin = u
         self._destination = v
         self._cost = cost
-
     def endpoints(self):
         return (self._origin, self._destination)
-
     def opposite(self, v):
         return self._destination if v is self._origin else self._origin
-
     def cost(self):
         return self._cost
-
     def __hash__(self):
         return hash((self._origin, self._destination))
 
@@ -47,36 +37,31 @@ class Graph:
         self._outgoing = {}
         self._incoming = {} if directed else self._outgoing
         self._directed = directed
-
     def insert_vertex(self, element):
         v = Vertex(element)
         self._outgoing[v] = {}
         if self._directed:
             self._incoming[v] = {}
         return v
-
     def insert_edge(self, u, v, cost):
         e = Edge(u, v, cost)
         self._outgoing[u][v] = e
         self._incoming[v][u] = e
-
     def get_edge(self, u, v):
         return self._outgoing.get(u, {}).get(v)
-
     def vertices(self):
         return self._outgoing.keys()
-
     def neighbors(self, v):
         return self._outgoing[v].keys()
-
     def incident_edges(self, v):
         return self._outgoing[v].values()
-
     def get_vertex(self, id_):
         for v in self.vertices():
-            if v.element().get('id') == id_:
+            if v.element()['id'] == id_:
                 return v
         return None
+
+# ------------------- AVL Tree -------------------
 
 class Node:
     def __init__(self, key, value):
@@ -89,10 +74,8 @@ class Node:
 class AVL:
     def __init__(self):
         self.root = None
-
     def insert(self, key, value):
         self.root = self._insert(self.root, key, value)
-
     def _insert(self, node, key, value):
         if node is None:
             return Node(key, value)
@@ -118,24 +101,10 @@ class AVL:
                 node.right = self._rotate_right(node.right)
                 return self._rotate_left(node)
         return node
-
-    def search(self, key):
-        return self._search(self.root, key)
-
-    def _search(self, node, key):
-        if node is None or node.key == key:
-            return node
-        if key < node.key:
-            return self._search(node.left, key)
-        else:
-            return self._search(node.right, key)
-
     def _height(self, node):
         return node.height if node else 0
-
     def _balance(self, node):
         return self._height(node.left) - self._height(node.right)
-
     def _rotate_left(self, z):
         y = z.right
         T2 = y.left
@@ -144,7 +113,6 @@ class AVL:
         z.height = 1 + max(self._height(z.left), self._height(z.right))
         y.height = 1 + max(self._height(y.left), self._height(y.right))
         return y
-
     def _rotate_right(self, z):
         y = z.left
         T3 = y.right
@@ -154,36 +122,18 @@ class AVL:
         y.height = 1 + max(self._height(y.left), self._height(y.right))
         return y
 
-# --- Parte 1: Algoritmo de Ruta con Recarga Inteligente ---
+# ------------------- RouteManager Mejorado -------------------
 
 class RouteManager:
     def __init__(self, graph):
         self.graph = graph
-
-    def find_nearest_recharge(self, start, max_battery):
-        visited = set()
-        queue = deque()
-        queue.append((start, 0, [start]))
-        visited.add(start)
-
-        while queue:
-            v, dist, path = queue.popleft()
-            if v.is_recharge:
-                return (v, path, dist)
-            for e in self.graph.incident_edges(v):
-                w = e.opposite(v)
-                c = e.cost()
-                if w not in visited and dist + c <= max_battery:
-                    visited.add(w)
-                    queue.append((w, dist + c, path + [w]))
-        return None
 
     def find_route_with_recharge(self, origin_id, dest_id, battery_limit=50):
         origin = self.graph.get_vertex(origin_id)
         dest = self.graph.get_vertex(dest_id)
         Q = deque()
         Q.append((origin, battery_limit, [origin], [], 0))
-        visited = set()
+        visited = dict()  # (v, battery): cost acumulado
         while Q:
             v, batt, path, recharges, cost = Q.popleft()
             if v == dest:
@@ -193,37 +143,30 @@ class RouteManager:
                     'recharge_stops': [x.element()['id'] for x in recharges]
                 }
             state = (v, batt)
-            if state in visited:
+            if state in visited and visited[state] <= cost:
                 continue
-            visited.add(state)
+            visited[state] = cost
+            if v.is_recharge and v not in recharges:
+                batt = battery_limit
+                recharges = recharges + [v]
             for e in self.graph.incident_edges(v):
                 w = e.opposite(v)
                 c = e.cost()
-                if c <= batt:
+                if batt >= c:
                     Q.append((w, batt - c, path + [w], recharges[:], cost + c))
-                else:
-                    recharge_data = self.find_nearest_recharge(v, battery_limit)
-                    if recharge_data:
-                        station, path_to_station, cost_to_station = recharge_data
-                        if station not in recharges and batt >= cost_to_station:
-                            new_path = path + path_to_station[1:] + [w]
-                            new_cost = cost + cost_to_station + c
-                            Q.append((w, battery_limit - c, new_path, recharges + [station], new_cost))
         return None
 
-# --- Parte 2: Registro de Rutas ---
+# ------------------- RouteTracker -------------------
 
 class RouteTracker:
     def __init__(self):
         self.avl = AVL()
         self.node_map = {}
-
     def register_route(self, path_ids, cost):
         key = '→'.join(map(str, path_ids))
         self.avl.insert(key, 1)
         for vid in path_ids:
             self.node_map[vid] = self.node_map.get(vid, 0) + 1
-
     def get_most_frequent_routes(self, n=5):
         results = []
         def inorder(node):
@@ -233,17 +176,15 @@ class RouteTracker:
             inorder(node.right)
         inorder(self.avl.root)
         return sorted(results, key=lambda x: x[1], reverse=True)[:n]
-
     def get_node_visit_stats(self):
         return dict(sorted(self.node_map.items(), key=lambda x: x[1], reverse=True))
 
-# --- Parte 3: Optimizador ---
+# ------------------- RouteOptimizer -------------------
 
 class RouteOptimizer:
     def __init__(self, tracker, manager):
         self.tracker = tracker
         self.manager = manager
-
     def suggest_optimized_route(self, origin_id, dest_id):
         history = self.tracker.get_most_frequent_routes(10)
         best = None
@@ -262,7 +203,6 @@ class RouteOptimizer:
                 'recharge_stops': []
             }
         return self.manager.find_route_with_recharge(origin_id, dest_id)
-
     def get_optimization_report(self):
         hist = self.tracker.get_most_frequent_routes()
         report = "Decisiones de optimización:\n"
@@ -272,13 +212,13 @@ class RouteOptimizer:
             pts = route.split('→')
             for i in range(len(pts)-1):
                 seg = f"{pts[i]}→{pts[i+1]}"
-                segs[seg] = segs.get(seg,0) + freq
+                segs[seg] = segs.get(seg, 0) + freq
         top = sorted(segs.items(), key=lambda x: x[1], reverse=True)[:5]
         for seg, cnt in top:
             report += f"{seg}: {cnt} usos\n"
         return report
 
-# --- Parte 4: Simulador de Órdenes ---
+# ------------------- OrderSimulator -------------------
 
 class OrderSimulator:
     def __init__(self, graph, manager, tracker, optimizer):
@@ -288,7 +228,6 @@ class OrderSimulator:
         self.optimizer = optimizer
         self.warehouses = [v for v in graph.vertices() if v.is_warehouse]
         self.clients = [v for v in graph.vertices() if v.is_client]
-
     def process_orders(self, n=5):
         for i in range(1, n+1):
             o = random.choice(self.warehouses)
@@ -305,20 +244,20 @@ class OrderSimulator:
             print(f"Ruta: {'→'.join(map(str,path))}")
             print(f"Costo: {cost} | Paradas de recarga: {recs} | Estado: Entregado\n")
 
-# --- Main ---
+# ------------------- MAIN -------------------
 
 if __name__ == "__main__":
     g = Graph()
     verts = []
-    for i in range(10):
+    for i in range(15):
         verts.append(g.insert_vertex({
             'id': i,
-            'almacen': (i==0 or i==1),
-            'cliente': (i>=8),
-            'estacion': (i%3==0 and i not in (0,))
+            'almacen': (i == 0 or i == 1),
+            'cliente': (i >= 12),
+            'estacion': (i % 4 == 0 and i != 0)
         }))
-    for i in range(9):
-        g.insert_edge(verts[i], verts[i+1], cost=10)
+    for i in range(len(verts) - 1):
+        g.insert_edge(verts[i], verts[i+1], cost=12)
 
     rm = RouteManager(g)
     rt = RouteTracker()
