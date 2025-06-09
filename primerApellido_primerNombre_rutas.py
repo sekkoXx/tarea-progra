@@ -1,5 +1,6 @@
-#!/usr/bin/env python3
+
 import random
+from collections import deque
 
 # --- Clases Base: Vertex, Edge, Graph, AVL ---
 
@@ -7,7 +8,6 @@ class Vertex:
     __slots__ = ('_element', 'is_warehouse', 'is_client', 'is_recharge')
 
     def __init__(self, element):
-        # element es un dict con llaves: 'id', 'almacen', 'cliente', 'estacion'
         self._element = element
         self.is_warehouse = element.get('almacen', False)
         self.is_client = element.get('cliente', False)
@@ -160,17 +160,27 @@ class RouteManager:
     def __init__(self, graph):
         self.graph = graph
 
-    def find_nearest_recharge(self, vertex):
-        for nbr in self.graph.neighbors(vertex):
-            if nbr.is_recharge:
-                return nbr
+    def find_nearest_recharge(self, start, max_battery):
+        visited = set()
+        queue = deque()
+        queue.append((start, 0, [start]))
+        visited.add(start)
+
+        while queue:
+            v, dist, path = queue.popleft()
+            if v.is_recharge:
+                return (v, path, dist)
+            for e in self.graph.incident_edges(v):
+                w = e.opposite(v)
+                c = e.cost()
+                if w not in visited and dist + c <= max_battery:
+                    visited.add(w)
+                    queue.append((w, dist + c, path + [w]))
         return None
 
     def find_route_with_recharge(self, origin_id, dest_id, battery_limit=50):
         origin = self.graph.get_vertex(origin_id)
         dest = self.graph.get_vertex(dest_id)
-        # BFS con estado (vértice, batería actual, ruta, recargas, costo acumulado)
-        from collections import deque
         Q = deque()
         Q.append((origin, battery_limit, [origin], [], 0))
         visited = set()
@@ -192,34 +202,29 @@ class RouteManager:
                 if c <= batt:
                     Q.append((w, batt - c, path + [w], recharges[:], cost + c))
                 else:
-                    station = self.find_nearest_recharge(v)
-                    if station and station not in recharges:
-                        # ir a estación, recargar, luego mismo vecino
-                        e2 = self.graph.get_edge(v, station)
-                        if e2:
-                            Q.append((w,
-                                      battery_limit - c,
-                                      path + [station, w],
-                                      recharges + [station],
-                                      cost + e2.cost() + c))
+                    recharge_data = self.find_nearest_recharge(v, battery_limit)
+                    if recharge_data:
+                        station, path_to_station, cost_to_station = recharge_data
+                        if station not in recharges and batt >= cost_to_station:
+                            new_path = path + path_to_station[1:] + [w]
+                            new_cost = cost + cost_to_station + c
+                            Q.append((w, battery_limit - c, new_path, recharges + [station], new_cost))
         return None
 
-# --- Parte 2: Sistema de Registro de Rutas ---
+# --- Parte 2: Registro de Rutas ---
 
 class RouteTracker:
     def __init__(self):
         self.avl = AVL()
-        self.node_map = {}  # conteo de visitas por nodo
+        self.node_map = {}
 
     def register_route(self, path_ids, cost):
-        # ruta como string "A→B→C"
         key = '→'.join(map(str, path_ids))
         self.avl.insert(key, 1)
         for vid in path_ids:
             self.node_map[vid] = self.node_map.get(vid, 0) + 1
 
     def get_most_frequent_routes(self, n=5):
-        # recorrido inorder + sort
         results = []
         def inorder(node):
             if not node: return
@@ -232,7 +237,7 @@ class RouteTracker:
     def get_node_visit_stats(self):
         return dict(sorted(self.node_map.items(), key=lambda x: x[1], reverse=True))
 
-# --- Parte 3: Optimizador de Rutas Recurrentes ---
+# --- Parte 3: Optimizador ---
 
 class RouteOptimizer:
     def __init__(self, tracker, manager):
@@ -241,31 +246,27 @@ class RouteOptimizer:
 
     def suggest_optimized_route(self, origin_id, dest_id):
         history = self.tracker.get_most_frequent_routes(10)
-        # heurística: combinar freq y costo
         best = None
         best_score = float('inf')
         for route_str, freq in history:
             ids = list(map(int, route_str.split('→')))
             if ids[0] == origin_id and ids[-1] == dest_id:
-                cost_est = len(ids) - 1  # estimado
+                cost_est = len(ids) - 1
                 score = cost_est / (freq or 1)
                 if score < best_score:
                     best_score, best = score, ids
         if best:
             return {
                 'path': best,
-                'total_cost': (len(best) - 1)*10,  # sup costo medio
+                'total_cost': (len(best) - 1)*10,
                 'recharge_stops': []
             }
-        # si no hay historial, uso manager
         return self.manager.find_route_with_recharge(origin_id, dest_id)
 
     def get_optimization_report(self):
         hist = self.tracker.get_most_frequent_routes()
         report = "Decisiones de optimización:\n"
-        report += "Se priorizaron rutas frecuentes y bajo costo.\n"
-        report += "Top segmentos:\n"
-        # contar segmentos
+        report += "Se priorizaron rutas frecuentes y bajo costo.\nTop segmentos:\n"
         segs = {}
         for route, freq in hist:
             pts = route.split('→')
@@ -304,10 +305,9 @@ class OrderSimulator:
             print(f"Ruta: {'→'.join(map(str,path))}")
             print(f"Costo: {cost} | Paradas de recarga: {recs} | Estado: Entregado\n")
 
-# --- Main para demostración ---
+# --- Main ---
 
 if __name__ == "__main__":
-    # crear grafo de ejemplo
     g = Graph()
     verts = []
     for i in range(10):
@@ -317,7 +317,6 @@ if __name__ == "__main__":
             'cliente': (i>=8),
             'estacion': (i%3==0 and i not in (0,))
         }))
-    # unir linealmente
     for i in range(9):
         g.insert_edge(verts[i], verts[i+1], cost=10)
 
@@ -326,7 +325,6 @@ if __name__ == "__main__":
     ro = RouteOptimizer(rt, rm)
     sim = OrderSimulator(g, rm, rt, ro)
 
-    # Procesar y mostrar
     sim.process_orders(5)
     print("Rutas más frecuentes:", rt.get_most_frequent_routes())
     print("Estadísticas de visitas por nodo:", rt.get_node_visit_stats())
