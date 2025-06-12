@@ -20,3 +20,5 @@ class RouteTracker:
         return sorted(results, key=lambda x: x[1], reverse=True)[:n]
     def get_node_visit_stats(self):
         return dict(sorted(self.node_map.items(), key=lambda x: x[1], reverse=True))
+    def get_next_order_id(self):
+        return len(self.node_map) + 1
