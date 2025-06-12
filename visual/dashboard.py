@@ -189,15 +189,15 @@ def run_dashboard():
                 elem = v.element()
                 client_rows.append({
                     "Cliente ID": elem["id"],
-                    "Tipo de Orden": "Entrega"
+                    "Cantidad de ordenes": 0
                 })
             st.dataframe(client_rows, use_container_width=True)
 
             # 2) Resumen de órdenes por cliente
             st.markdown("### 📦 Órdenes Totales por Cliente")
             counts = {}
-            for order in sim.order_simulator.orders:
-                cid = order["destination"]
+            for order in sim.orders.values():
+                cid = order["dest"]
                 counts[cid] = counts.get(cid, 0) + 1
 
             summary = []
@@ -217,7 +217,7 @@ def run_dashboard():
                 sorted(counts.keys()), 
                 help="Muestra todas las órdenes entregadas a este cliente"
             )
-            detalle = [o for o in sim.order_simulator.orders if o["destination"] == cliente_sel]
+            detalle = [o for o in sim.orders.values() if o["dest"] == cliente_sel]
             if detalle:
                 st.table(detalle)
             else:
