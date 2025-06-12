@@ -172,9 +172,6 @@ def run_dashboard():
                 - 🔴 **Rojo**: Ruta calculada
                 """)
 
-    with p3:
-        st.subheader("Clientes y Órdenes")
-
     # Pestaña de clientes y órdenes
     with p3:
         st.subheader("📑 Clientes y Órdenes")
