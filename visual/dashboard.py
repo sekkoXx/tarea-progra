@@ -127,10 +127,10 @@ def run_dashboard():
                 if origen == destino:
                     st.error("El nodo origen y destino no pueden ser iguales.")
                 else:
-                    resultado = sim.find_route_with_recharge(origen, destino, max_autonomy=50)
+                    resultado = sim.route_manager.find_route_with_recharge(origen, destino, battery_limit=50)
                     if resultado:
                         path = resultado["path"]
-                        costo = resultado["cost"]
+                        costo = resultado["total_cost"]
                         recs = resultado["recharge_stops"]
 
                         st.success(f"Ruta encontrada: {' → '.join(map(str, path))} | Costo: {costo}")
