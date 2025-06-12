@@ -167,3 +167,63 @@ def run_dashboard():
 
     with p5:
         st.subheader("Estadísticas Generales")
+
+        if "sim" not in st.session_state:
+            st.warning("Primero debes ejecutar una simulación para ver las estadísticas.")
+        else:
+            sim = st.session_state.sim
+            tracker = sim.route_tracker
+            graph = sim.graph
+
+            # Contar roles de nodos
+            role_counts = {"cliente": 0, "almacenamiento": 0, "recarga": 0}
+            for v in graph.vertices():
+                if v.is_client:
+                    role_counts["cliente"] += 1
+                elif v.is_warehouse:
+                    role_counts["almacenamiento"] += 1
+                elif v.is_recharge:
+                    role_counts["recarga"] += 1
+
+            # Gráfico de torta (proporción por rol)
+            st.markdown("### Proporción de nodos por tipo")
+            fig_pie, ax_pie = plt.subplots()
+            ax_pie.pie(role_counts.values(), labels=role_counts.keys(), autopct='%1.1f%%', startangle=140)
+            ax_pie.axis('equal')
+            st.pyplot(fig_pie)
+
+            # Gráfico de barras (nodos más visitados por tipo)
+            visit_stats = tracker.get_node_visit_stats()
+            client_visits = {}
+            warehouse_visits = {}
+            recharge_visits = {}
+
+            for node_id, count in visit_stats.items():
+                v = graph.get_vertex(node_id)
+                if v:
+                    if v.is_client:
+                        client_visits[node_id] = count
+                    elif v.is_warehouse:
+                        warehouse_visits[node_id] = count
+                    elif v.is_recharge:
+                        recharge_visits[node_id] = count
+
+            st.markdown("### Nodos más visitados por tipo")
+            fig_bar, ax_bar = plt.subplots()
+            width = 0.25
+            labels = list(set(client_visits.keys()) | set(warehouse_visits.keys()) | set(recharge_visits.keys()))
+            labels.sort()
+            x = range(len(labels))
+            c_vals = [client_visits.get(i, 0) for i in labels]
+            w_vals = [warehouse_visits.get(i, 0) for i in labels]
+            r_vals = [recharge_visits.get(i, 0) for i in labels]
+
+            ax_bar.bar([i - width for i in x], c_vals, width, label='Clientes', color='green')
+            ax_bar.bar(x, w_vals, width, label='Almacenes', color='orange')
+            ax_bar.bar([i + width for i in x], r_vals, width, label='Estaciones', color='blue')
+            ax_bar.set_xticks(x)
+            ax_bar.set_xticklabels(labels)
+            ax_bar.set_ylabel("Visitas")
+            ax_bar.set_title("Visitas por Nodo")
+            ax_bar.legend()
+            st.pyplot(fig_bar)
