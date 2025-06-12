@@ -175,6 +175,57 @@ def run_dashboard():
     with p3:
         st.subheader("Clientes y Órdenes")
 
+    # Pestaña de clientes y órdenes
+    with p3:
+        st.subheader("📑 Clientes y Órdenes")
+
+            # Verificar simulación
+        if "sim" not in st.session_state:
+            st.info("Ejecuta primero la simulación en la pestaña 'Run Simulation'.")
+        else:
+            sim = st.session_state.sim
+
+            # 1) Tabla de clientes registrados
+            st.markdown("### 👤 Clientes Registrados")
+            client_rows = []
+            for v in sim.order_simulator.clients:
+                elem = v.element()
+                client_rows.append({
+                    "Cliente ID": elem["id"],
+                    "Tipo de Orden": "Entrega"
+                })
+            st.dataframe(client_rows, use_container_width=True)
+
+            # 2) Resumen de órdenes por cliente
+            st.markdown("### 📦 Órdenes Totales por Cliente")
+            counts = {}
+            for order in sim.order_simulator.orders:
+                cid = order["destination"]
+                counts[cid] = counts.get(cid, 0) + 1
+
+            summary = []
+            for v in sim.order_simulator.clients:
+                cid = v.element()["id"]
+                summary.append({
+                    "Cliente ID": cid,
+                    "Tipo de Orden": "Entrega",
+                    "Órdenes Asociadas": counts.get(cid, 0)
+                })
+            st.dataframe(summary, use_container_width=True)
+
+            # 3) Detalle interactivo para un cliente
+            st.markdown("### 🔍 Detalle de Órdenes por Cliente")
+            cliente_sel = st.selectbox(
+                "Selecciona Cliente ID", 
+                sorted(counts.keys()), 
+                help="Muestra todas las órdenes entregadas a este cliente"
+            )
+            detalle = [o for o in sim.order_simulator.orders if o["destination"] == cliente_sel]
+            if detalle:
+                st.table(detalle)
+            else:
+                st.warning(f"El cliente {cliente_sel} no ha recibido órdenes.")
+
     with p4:
         st.subheader("Análisis de Rutas")
 
