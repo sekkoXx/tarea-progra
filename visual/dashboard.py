@@ -4,12 +4,25 @@ import networkx as nx
 from visual.networkx_adapter import NetworkXAdapter
 from sim.simulation import Simulation
 from model.graph import Graph
+from RouteManager import RouteManager
+from RouteTracker import RouteTracker
+from RouteOptimizer import RouteOptimizer
+from OrderSimulator import OrderSimulator
 
 def run_dashboard():
     st.set_page_config(layout="wide")
     st.title("Sistema de Drones Autónomos - Explore Network")
 
-    # Inicialización del grafo (para demo, aquí puedes cargar uno real)
+    # Inicialización del grafo
+    '''grafo = Graph()
+    vertices = []    # Nodos: 20% almacenes, 20% estaciones de recarga, 60% clientes
+    for i in range(15):
+        v = grafo.insert_vertex({
+            'id': i,
+            'almacen': (i == 0 or i == 1),  # Almacenes en los nodos 0 y 1
+            'cliente': (i >= 12),           # Clientes en los nodos 12 a 14
+            'estacion': (i % 4 == 0 and i != 0)  # Estaciones de recarga en nodos múltiplos de 4, excepto el nodo 0
+        })'''
     if "sim" not in st.session_state:
         g = Graph()
         verts = []

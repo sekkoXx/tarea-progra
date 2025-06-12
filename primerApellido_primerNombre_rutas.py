@@ -4,62 +4,9 @@ from collections import deque
 
 # ------------------- Clases Base -------------------
 
-class Vertex:
-    __slots__ = ('_element', 'is_warehouse', 'is_client', 'is_recharge')
-    def __init__(self, element):
-        self._element = element
-        self.is_warehouse = element.get('almacen', False)
-        self.is_client = element.get('cliente', False)
-        self.is_recharge = element.get('estacion', False)
-    def element(self):
-        return self._element
-    def __hash__(self):
-        return hash(id(self))
-    def __str__(self):
-        return str(self._element['id'])
-
-class Edge:
-    def __init__(self, u, v, cost):
-        self._origin = u
-        self._destination = v
-        self._cost = cost
-    def endpoints(self):
-        return (self._origin, self._destination)
-    def opposite(self, v):
-        return self._destination if v is self._origin else self._origin
-    def cost(self):
-        return self._cost
-    def __hash__(self):
-        return hash((self._origin, self._destination))
-
-class Graph:
-    def __init__(self, directed=False):
-        self._outgoing = {}
-        self._incoming = {} if directed else self._outgoing
-        self._directed = directed
-    def insert_vertex(self, element):
-        v = Vertex(element)
-        self._outgoing[v] = {}
-        if self._directed:
-            self._incoming[v] = {}
-        return v
-    def insert_edge(self, u, v, cost):
-        e = Edge(u, v, cost)
-        self._outgoing[u][v] = e
-        self._incoming[v][u] = e
-    def get_edge(self, u, v):
-        return self._outgoing.get(u, {}).get(v)
-    def vertices(self):
-        return self._outgoing.keys()
-    def neighbors(self, v):
-        return self._outgoing[v].keys()
-    def incident_edges(self, v):
-        return self._outgoing[v].values()
-    def get_vertex(self, id_):
-        for v in self.vertices():
-            if v.element()['id'] == id_:
-                return v
-        return None
+from model.graph import Graph
+from model.vertex import Vertex
+from model.edge import Edge
 
 # ------------------- AVL Tree -------------------
 

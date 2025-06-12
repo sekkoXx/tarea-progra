@@ -1,3 +1,6 @@
+from model.vertex import Vertex
+from model.edge import Edge
+
 class Graph:
     def __init__(self, directed=False):
         """Inicializa el grafo como dirigido o no dirigido."""
@@ -17,9 +20,9 @@ class Graph:
             self._incoming[v] = {}  # Solo si es dirigido, agrega entrada
         return v
 
-    def insert_edge(self, u, v, element):
+    def insert_edge(self, u, v, cost):
         """Crea y agrega una arista entre dos vértices dados."""
-        e = Edge(u, v, element)
+        e = Edge(u, v, cost)
         self._outgoing[u][v] = e   # Agrega arista a salidas
         self._incoming[v][u] = e   # Agrega arista a entradas
         return e
@@ -113,10 +116,16 @@ class Graph:
         if len(result) != len(in_degree):
             raise ValueError("Graph has a cycle. Topological sort not possible.")
         return result
+    
+    def get_vertex(self, id_):  # bUSCA POR ID
+        for v in self.vertices():
+            if v.element()['id'] == id_:
+                return v
+        return None
 
-    def get_vertex(self, element):
-        """Busca y devuelve el vértice con el elemento dado."""
+    '''def get_vertex(self, element):
+        #Busca y devuelve el vértice con el elemento dado.
         for v in self.vertices():
             if v.element() == element:
                 return v
-        return None
+        return None'''
