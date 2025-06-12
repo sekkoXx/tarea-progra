@@ -222,9 +222,103 @@ def run_dashboard():
                 st.table(detalle)
             else:
                 st.warning(f"El cliente {cliente_sel} no ha recibido órdenes.")
-
+    
     with p4:
-        st.subheader("Análisis de Rutas")
+        st.subheader("📈 Análisis de Rutas")
+
+        # Verificar que la simulación se haya ejecutado
+        if 'sim_data' not in st.session_state:
+            st.warning("Debes ejecutar la simulación y procesar órdenes antes de ver el análisis de rutas.")
+        else:
+            _, sim, rt, _, _ = st.session_state.sim_data
+            tracker: RouteTracker = rt
+
+            # 1) Selección de cuántas rutas frecuentes mostrar
+            top_n = st.slider("Cantidad de rutas frecuentes a mostrar", 1, 20, 10)
+
+            # 2) Obtener y ordenar rutas
+            routes = tracker.get_most_frequent_routes(n=top_n)
+            if not routes:
+                st.warning("No hay rutas registradas todavía.")
+            else:
+                sorted_routes = sorted(routes, key=lambda x: x[0])
+
+                # 3) Tabla de rutas frecuentes
+                st.markdown("#### 📋 Rutas Más Frecuentes")
+                df_routes = [
+                    {"Ruta": path, "Frecuencia": freq}
+                    for path, freq in sorted_routes
+                ]
+                st.dataframe(df_routes, use_container_width=True)
+
+                # 4) Estadísticas de visitas por nodo
+                st.markdown("#### 📍 Visitas por Nodo")
+                visitas = tracker.get_node_visit_stats()
+                df_visitas = [
+                    {"Nodo ID": nid, "Visitas": cnt}
+                    for nid, cnt in visitas.items()
+                ]
+                st.dataframe(df_visitas, use_container_width=True)
+                st.bar_chart(visitas)
+
+                # 5) Detalle interactivo de ruta o nodo
+                st.markdown("#### 🔍 Detalle Interactivo")
+                modo = st.radio("Ver detalle por:", ("Ruta", "Nodo"))
+                if modo == "Ruta":
+                    rutas_list = [r for r, _ in sorted_routes]
+                    ruta_sel = st.selectbox("Selecciona una Ruta", rutas_list)
+                    segmentos = ruta_sel.split("→")
+                    seg_rows = [
+                        {"Segmento": f"{segmentos[i]} → {segmentos[i+1]}"}
+                        for i in range(len(segmentos)-1)
+                    ]
+                    st.table(seg_rows)
+                else:
+                    nodo_sel = st.selectbox("Selecciona Nodo ID", list(visitas.keys()))
+                    st.markdown(f"**Visitas al nodo {nodo_sel}:** {visitas[nodo_sel]}")
+                    st.markdown("Rutas frecuentes que incluyen este nodo:")
+                    rutas_con_nodo = [
+                        path for path, _ in sorted_routes
+                        if str(nodo_sel) in path.split("→")
+                    ]
+                    if rutas_con_nodo:
+                        for r in rutas_con_nodo:
+                            st.write(f"- {r}")
+                    else:
+                        st.write("— Ninguna de las rutas frecuentes incluye este nodo.")
+
+                # 6) Visualizar el árbol AVL que guarda las rutas
+                st.markdown("#### 🌳 Estructura AVL de Rutas")
+                import networkx as nx
+                import matplotlib.pyplot as plt
+
+                def build_avl_graph(node, g):
+                    if not node:
+                        return
+                    label = f"{node.key}\\nFreq: {node.value}"
+                    g.add_node(label)
+                    if node.left:
+                        left_label = f"{node.left.key}\\nFreq: {node.left.value}"
+                        g.add_edge(label, left_label)
+                        build_avl_graph(node.left, g)
+                    if node.right:
+                        right_label = f"{node.right.key}\\nFreq: {node.right.value}"
+                        g.add_edge(label, right_label)
+                        build_avl_graph(node.right, g)
+
+                avl_graph = nx.DiGraph()
+                build_avl_graph(tracker.avl.root, avl_graph)
+                fig, ax = plt.subplots(figsize=(12, 8))
+                pos = nx.nx_agraph.graphviz_layout(avl_graph, prog="dot")
+                nx.draw(avl_graph, pos,
+                        with_labels=True,
+                        arrows=False,
+                        node_size=3000,
+                        node_color="#90caf9",
+                        font_size=10,
+                        ax=ax)
+                st.pyplot(fig)
+
 
     with p5:
         st.subheader("Estadísticas Generales")
