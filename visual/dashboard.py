@@ -22,10 +22,16 @@ def run_dashboard():
         n_orders = st.slider("Cantidad de ordenes", min_value=10, max_value=300, value=10)
 
         if st.button("Iniciar Grafo"):
+            if n_nodes < 10 or m_edges < n_nodes - 1:
+                st.error("El número de nodos debe ser al menos 10 y el número de aristas debe ser al menos igual a n_nodes - 1 para asegurar conectividad.")
+                return
+
             g = Graph()
             vertices = []
             roles = ['almacen'] * (n_nodes // 5) + ['estacion'] * (n_nodes // 5) + ['cliente'] * (n_nodes - 2 * (n_nodes // 5))
             random.shuffle(roles)
+
+            # Insertar nodos
             for i in range(n_nodes):
                 role = roles[i]
                 v = g.insert_vertex({
@@ -35,44 +41,46 @@ def run_dashboard():
                     'estacion': (role == 'estacion')
                 })
                 vertices.append(v)
-            for _ in range(m_edges):
+
+            # Paso 1: conectar todos los nodos con al menos un MST-like (árbol generador)
+            unconnected = vertices[:]
+            connected = [unconnected.pop()]
+
+            while unconnected:
+                u = random.choice(connected)
+                v = unconnected.pop(random.randint(0, len(unconnected) - 1))
+                cost = random.randint(5, 20)
+                g.insert_edge(u, v, cost)
+                connected.append(v)
+
+            # Paso 2: añadir más aristas aleatorias hasta llegar a m_edges
+            existing_edges = n_nodes - 1  # ya agregamos estas
+            max_possible_edges = n_nodes * (n_nodes - 1) // 2
+            remaining_edges = min(m_edges - existing_edges, max_possible_edges - existing_edges)
+
+            attempts = 0
+            while remaining_edges > 0 and attempts < 10 * m_edges:
                 u = random.choice(vertices)
                 v = random.choice(vertices)
                 if u != v and not g.get_edge(u, v):
                     cost = random.randint(5, 20)
                     g.insert_edge(u, v, cost)
-                st.session_state.grafo = g
+                    remaining_edges -= 1
+                attempts += 1
+
+            st.session_state.sim = Simulation(g)
             st.success(f"Grafo creado con {n_nodes} nodos y {m_edges} aristas.")
 
+            # Crear ordenes
+            st.session_state.sim.order_simulator.process_orders(n_orders)
+            print(st.session_state.sim.orders)  # Ahora falta que guarde las ordenes aca
 
-    # Inicialización del grafo
-    '''grafo = Graph()
-    vertices = []    # Nodos: 20% almacenes, 20% estaciones de recarga, 60% clientes
-    for i in range(15):
-        v = grafo.insert_vertex({
-            'id': i,
-            'almacen': (i == 0 or i == 1),  # Almacenes en los nodos 0 y 1
-            'cliente': (i >= 12),           # Clientes en los nodos 12 a 14
-            'estacion': (i % 4 == 0 and i != 0)  # Estaciones de recarga en nodos múltiplos de 4, excepto el nodo 0
-        })'''
+
     with p2:
         if "sim" not in st.session_state:
-            g = Graph()
-            verts = []
-            for i in range(6):
-                v = g.insert_vertex({
-                    'id': i,
-                    'almacen': (i == 0),
-                    'cliente': (i in [4, 5]),
-                    'estacion': (i == 2)
-                })
-                verts.append(v)
-            g.insert_edge(verts[0], verts[1], 10)
-            g.insert_edge(verts[1], verts[2], 15)
-            g.insert_edge(verts[2], verts[3], 10)
-            g.insert_edge(verts[3], verts[4], 10)
-            g.insert_edge(verts[3], verts[5], 15)
-            st.session_state.sim = Simulation(g)
+            st.error("Por favor, ejecute la simulación primero.")
+            return
+        st.subheader("Explorar Red de Drones")
 
         sim = st.session_state.sim
         graph_adapter = NetworkXAdapter(sim.graph)
@@ -104,14 +112,14 @@ def run_dashboard():
         destino = st.selectbox("Destino", node_ids, key="destino")
 
         if st.button("✈ Calcular Ruta"):
-            resultado = sim.find_route_with_recharge(origen, destino, max_autonomy=50)
+            resultado = sim.route_manager.find_route_with_recharge(origen, destino, max_autonomy=50)
             if resultado:
                 path = resultado["path"]
                 costo = resultado["cost"]
                 recs = resultado["recharge_stops"]
                 st.text_area("Ruta encontrada:", f"Path: {' → '.join(path)}\nCosto: {costo}\nRecargas: {recs}")
                 if st.button("✅ Completar Entrega y Crear Orden"):
-                    oid = sim.create_order_from_route(origen, destino, resultado)
+                    oid = sim.order_simulator.create_order_from_route(origen, destino, resultado)
                     st.success(f"Orden {oid} creada.")
             else:
                 st.warning("No se encontró ruta válida con la batería actual.")
