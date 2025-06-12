@@ -15,7 +15,7 @@ class NetworkXAdapter:
         for e in self.custom_graph.edges():
             u_id = e.endpoints()[0].element()['id']
             v_id = e.endpoints()[1].element()['id']
-            G.add_edge(u_id, v_id, cost=e.cost())
+            G.add_edge(u_id, v_id, weight=e.cost())
         return G
 
     def get_networkx_graph(self):
