@@ -15,6 +15,7 @@ class OrderSimulator:
         if not route:
             print(f"No se encontró ruta de {origin_id} a {dest_id}")
             return None
+        order_id = f"O{self.tracker.get_next_order_id()}"
         path = route['path']
         cost = route['total_cost']
         recs = route.get('recharge_stops', [])
@@ -22,23 +23,21 @@ class OrderSimulator:
         print(f"Ruta de {origin_id} a {dest_id}:")
         print(f"Ruta: {'→'.join(map(str,path))}")
         print(f"Costo: {cost} | Paradas de recarga: {recs} | Estado: Entregado\n")
-        return path, cost, recs
+        return path, cost, recs, origin_id, dest_id, order_id
 
     def process_orders(self, n=5):
+        resultados = []
         for i in range(1, n+1):
             o = random.choice(self.warehouses)
             d = random.choice(self.clients)
-            self.process_origen_destino(o.element()['id'], d.element()['id'])
-
-            # Codigo antiguo
-            '''route = self.optimizer.suggest_optimized_route(o.element()['id'], d.element()['id'])
-            if not route:
-                print(f"Orden #{i}: No se encontró ruta de {o.element()['id']} a {d.element()['id']}")
-                continue
-            path = route['path']
-            cost = route['total_cost']
-            recs = route.get('recharge_stops', [])
-            self.tracker.register_route(path, cost)
-            print(f"Orden #{i}: {o.element()['id']} → {d.element()['id']}")
-            print(f"Ruta: {'→'.join(map(str,path))}")
-            print(f"Costo: {cost} | Paradas de recarga: {recs} | Estado: Entregado\n")'''
+            resultado = self.process_origen_destino(o.element()['id'], d.element()['id'])
+            if resultado:
+                resultados.append({
+                    'order_id': resultado[5],
+                    'origin': resultado[3],
+                    'dest': resultado[4],
+                    'path': resultado[0],
+                    'cost': resultado[1],
+                    'recharges': resultado[2]
+                })
+        return resultados

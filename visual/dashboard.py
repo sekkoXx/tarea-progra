@@ -69,7 +69,20 @@ def run_dashboard():
             st.session_state.sim = Simulation(g)
             st.success(f"Grafo creado con {n_nodes} nodos y {m_edges} aristas.")
 
-            st.session_state.sim.order_simulator.process_orders(n_orders)
+            for _ in range(n_orders):
+                order_simulator = OrderSimulator(g, st.session_state.sim.route_manager, st.session_state.sim.route_tracker, st.session_state.sim.route_optimizer)
+                results = order_simulator.process_orders(1)
+                for result in results:
+                    st.session_state.sim.orders[result['order_id']] = {
+                        "origin": result['origin'],
+                        "dest": result['dest'],
+                        "path": result['path'],
+                        "cost": result['cost'],
+                        "recharges": result['recharges'],
+                        "status": "Por entregar"
+                    }
+            st.success(f"Órdenes procesadas: {len(st.session_state.sim.orders)}")
+            print(st.session_state.sim.orders)
 
     # --------------------------
     # TAB 2: Explore Network
