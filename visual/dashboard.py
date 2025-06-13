@@ -289,8 +289,6 @@ def run_dashboard():
 
                 # 6) Visualizar el árbol AVL que guarda las rutas
                 st.markdown("#### 🌳 Estructura AVL de Rutas")
-                import networkx as nx
-                import matplotlib.pyplot as plt
 
                 def build_avl_graph(node, g):
                     if not node:
