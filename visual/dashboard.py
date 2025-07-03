@@ -227,10 +227,11 @@ def run_dashboard():
         st.subheader("📈 Análisis de Rutas")
 
         # Verificar que la simulación se haya ejecutado
-        if 'sim_data' not in st.session_state:
+        if 'sim' not in st.session_state:
             st.warning("Debes ejecutar la simulación y procesar órdenes antes de ver el análisis de rutas.")
         else:
-            _, sim, rt, _, _ = st.session_state.sim_data
+            sim = st.session_state.sim
+            rt = st.session_state.sim.route_tracker
             tracker: RouteTracker = rt
 
             # 1) Selección de cuántas rutas frecuentes mostrar
@@ -306,9 +307,39 @@ def run_dashboard():
 
                 avl_graph = nx.DiGraph()
                 build_avl_graph(tracker.avl.root, avl_graph)
+
+                def compute_tree_positions(node, x=0, y=0, pos=None, depth_spacing=1.5, x_step=1.0):
+                    """
+                    Asigna posiciones (x,y) a cada nodo basado en recorrido in-order.
+                    - depth_spacing controla la separación vertical entre niveles.
+                    - x_step controla la separación horizontal mínima.
+                    """
+                    if pos is None:
+                        pos = {}
+                    # Recorrer subárbol izquierdo
+                    if node.left:
+                        compute_tree_positions(node.left, x, y - depth_spacing, pos, depth_spacing, x_step)
+                    # Posición del nodo actual: 
+                    # Usamos un contador almacenado en pos['_x_counter']
+                    xc = pos.get('_x_counter', 0)
+                    label = f"{node.key}\\nFreq: {node.value}"
+                    pos[label] = (xc * x_step, y)
+                    pos['_x_counter'] = xc + 1
+                    # Recorrer subárbol derecho
+                    if node.right:
+                        compute_tree_positions(node.right, x, y - depth_spacing, pos, depth_spacing, x_step)
+                    return pos
+
+                # Invocación del conjuro
+                # Inicializa contador
+                positions = compute_tree_positions(tracker.avl.root, y=0)
+                # Elimina la llave interna
+                positions.pop('_x_counter', None)
+
+                # 3) Dibujar
                 fig, ax = plt.subplots(figsize=(12, 8))
-                pos = nx.nx_agraph.graphviz_layout(avl_graph, prog="dot")
-                nx.draw(avl_graph, pos,
+                nx.draw(avl_graph,
+                        pos=positions,
                         with_labels=True,
                         arrows=False,
                         node_size=3000,
