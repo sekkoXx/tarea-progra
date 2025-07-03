@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 import networkx as nx
 import random
@@ -9,6 +10,7 @@ from RouteManager import RouteManager
 from RouteTracker import RouteTracker
 from RouteOptimizer import RouteOptimizer
 from OrderSimulator import OrderSimulator
+import folium
 
 def run_dashboard():
     st.set_page_config(layout="wide")
@@ -37,7 +39,9 @@ def run_dashboard():
                     'id': i,
                     'almacen': (role == 'almacen'),
                     'cliente': (role == 'cliente'),
-                    'estacion': (role == 'estacion')
+                    'estacion': (role == 'estacion'),
+                    'lat': random.uniform(-38.8, -38.6),  # Latitudes de Temuco
+                    'lon': random.uniform(-72.7, -72.5)   # Longitudes de Temuco
                 })
                 vertices.append(v)
 
@@ -88,89 +92,140 @@ def run_dashboard():
     # TAB 2: Explore Network
     # --------------------------
     with p2:
-        st.header("🌍 Explorar Red de Transporte")
+        st.header("🌍 Explore Network (Geolocalizado)")
 
         if "sim" not in st.session_state:
             st.warning("Primero debes crear un grafo en la pestaña 'Run Simulation'.")
         else:
             sim = st.session_state.sim
             graph = sim.graph
-            adapter = NetworkXAdapter(graph)
-            G = adapter.get_networkx_graph()
-            pos = nx.spring_layout(G, seed=42)
 
-            # Dibujar red
-            node_colors = []
-            node_labels = {}
-            for node_id, data in G.nodes(data=True):
-                role = data["role"]
-                if role == "almacenamiento":
-                    node_colors.append("orange")
-                elif role == "recarga":
-                    node_colors.append("blue")
+            # 1) Prepara la lista de vértices por rol
+            almacenes = [v for v in graph.vertices() if v.is_warehouse]
+            clientes  = [v for v in graph.vertices() if v.is_client]
+            estaciones = [v for v in graph.vertices() if v.is_recharge]
+
+            # 2) Controles de selección
+            origen = st.selectbox(
+                "Nodo Origen (📦 Almacén)",
+                options=[v.element()["id"] for v in almacenes],
+                format_func=lambda x: f"Almacén {x}"
+            )
+            destino = st.selectbox(
+                "Nodo Destino (👤 Cliente)",
+                options=[v.element()["id"] for v in clientes],
+                format_func=lambda x: f"Cliente {x}"
+            )
+            algoritmo = st.radio(
+                "Algoritmo de ruta",
+                ("Dijkstra", "Floyd-Warshall")
+            )
+
+            col1, col2, col3 = st.columns([1,1,1])
+            calculate_btn = col1.button("✈️ Calculate Route")
+            mst_btn       = col2.button("🌲 Show MST")
+            complete_btn  = col3.button("✅ Complete Delivery and Create Order")
+
+            # 3) Crea el mapa centrado en Temuco
+            m = folium.Map(location=[-38.7359, -72.5904], zoom_start=13)
+
+            # 4) Dibuja todos los nodos
+            def draw_vertex(v):
+                lat, lon = v.element()["lat"], v.element()["lon"]
+                role = ("almacenamiento" if v.is_warehouse 
+                        else "recarga" if v.is_recharge 
+                        else "cliente")
+                color = {"almacenamiento":"orange","recarga":"blue","cliente":"green"}[role]
+                folium.CircleMarker(
+                    location=[lat, lon],
+                    radius=6,
+                    color=color,
+                    fill=True,
+                    fill_opacity=0.9,
+                    popup=f"{v.element()['id']} ({role})"
+                ).add_to(m)
+
+            for v in graph.vertices():
+                draw_vertex(v)
+
+            # 5) Dibuja todas las aristas
+            for edge in graph.edges():
+                u, v = edge.endpoints()
+                data = edge.cost()
+
+                lat1, lon1 = u.element()["lat"], u.element()["lon"]
+                lat2, lon2 = v.element()["lat"], v.element()["lon"]
+                folium.PolyLine(
+                    locations=[(lat1, lon1), (lat2, lon2)],
+                    weight=2,
+                    opacity=0.6,
+                    dash_array=None,
+                    popup=f"Cost: {data}"
+                ).add_to(m)
+
+            # 6) Si piden MST
+            if mst_btn:
+                # Obtener lista de aristas del MST (Kruskal)
+                mst_edges = sim.route_optimizer.kruskal_mst(graph)
+                for u, v, w in mst_edges:
+                    lat1, lon1 = u.element()["lat"], u.element()["lon"]
+                    lat2, lon2 = v.element()["lat"], v.element()["lon"]
+                    folium.PolyLine(
+                        locations=[(lat1, lon1), (lat2, lon2)],
+                        weight=3,
+                        opacity=0.4,
+                        color="gray",
+                        dash_array="5,5",
+                        popup=f"MST Edge {u.element()['id']}–{v.element()['id']} (w={w})"
+                    ).add_to(m)
+
+            # 7) Si piden ruta
+            if calculate_btn:
+                # Eligir método
+                if algoritmo == "Dijkstra":
+                    res = sim.route_manager.find_route_with_recharge(
+                        origen, destino, battery_limit=50, method="dijkstra"
+                    )
                 else:
-                    node_colors.append("green")
-                node_labels[node_id] = f"{node_id} ({role[0].upper()})"
+                    res = sim.route_manager.find_route_with_recharge(
+                        origen, destino, battery_limit=50, method="floyd-warshall"
+                    )
 
-            fig, ax = plt.subplots(figsize=(10, 6))
-            nx.draw(G, pos, node_color=node_colors, with_labels=False, ax=ax)
-            nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=10, ax=ax)
-            nx.draw_networkx_edge_labels(G, pos, edge_labels=nx.get_edge_attributes(G, 'weight'), font_size=8, ax=ax)
-            st.pyplot(fig)
-
-            # Selectbox
-            node_ids = list(G.nodes)
-            origen = st.selectbox("Nodo Origen", node_ids, key="origen")
-            destino = st.selectbox("Nodo Destino", node_ids, key="destino")
-
-            if st.button("✈ Calcular Ruta"):
-                if origen == destino:
-                    st.error("El nodo origen y destino no pueden ser iguales.")
+                if not res:
+                    st.error("No se encontró ruta válida con la batería actual y estaciones.")
                 else:
-                    resultado = sim.route_manager.find_route_with_recharge(origen, destino, battery_limit=50)
-                    if resultado:
-                        path = resultado["path"]
-                        costo = resultado["total_cost"]
-                        recs = resultado["recharge_stops"]
+                    path, cost, recs = res["path"], res["total_cost"], res["recharge_stops"]
+                    # Dibuja ruta en rojo
+                    for i in range(len(path)-1):
+                        u = graph.get_vertex(path[i])
+                        v = graph.get_vertex(path[i+1])
+                        folium.PolyLine(
+                            locations=[
+                                (u.element()["lat"], u.element()["lon"]),
+                                (v.element()["lat"], v.element()["lon"])
+                            ],
+                            weight=4,
+                            color="red",
+                            popup=f"{path[i]}→{path[i+1]}"
+                        ).add_to(m)
+                    # Informe de vuelo
+                    st.markdown(f"*Ruta:* {' → '.join(map(str,path))}")
+                    st.markdown(f"*Distancia/Costo total:* {cost}")
+                    st.markdown(f"*Paradas recarga:* {recs if recs else 'Ninguna'}")
+                    # Guardar resultado en sesión para completar
+                    st.session_state.last_route = res
 
-                        st.success(f"Ruta encontrada: {' → '.join(map(str, path))} | Costo: {costo}")
-                        st.markdown(f"🚉 Recargas: {', '.join(map(str, recs)) if recs else 'No se usaron'}")
+            # 8) Completar entrega
+            if complete_btn:
+                if "last_route" not in st.session_state:
+                    st.error("Primero calcula una ruta válida antes de crear la orden.")
+                else:
+                    lr = st.session_state.last_route
+                    oid = sim.create_order_from_route(origen, destino, lr)
+                    st.success(f"Orden {oid} creada: {origen} → {destino}")
 
-                        path_edges = [(path[i], path[i+1]) for i in range(len(path)-1)]
-                        fig2, ax2 = plt.subplots(figsize=(10, 6))
-                        nx.draw(G, pos, node_color=node_colors, ax=ax2)
-                        nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=10, ax=ax2)
-                        nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color="red", width=2, ax=ax2)
-                        st.pyplot(fig2)
-
-                        if st.button("✅ Completar Entrega y Crear Orden"):
-                            oid = sim.create_order_from_route(origen, destino, resultado)
-                            st.success(f"Orden {oid} creada exitosamente.")
-                    else:
-                        st.warning("No se encontró una ruta válida con la batería actual.")
-
-            # Mostrar rutas anteriores
-            if sim.orders:
-                st.sidebar.subheader("📜 Rutas registradas")
-                selected_order = st.sidebar.selectbox("Ver orden", list(sim.orders.keys()))
-                od = sim.orders[selected_order]
-                st.sidebar.write(f"De: {od['origin']}, A: {od['dest']}, Costo: {od['cost']}")
-                if st.sidebar.button("Mostrar ruta registrada"):
-                    path_edges = [(od["path"][i], od["path"][i+1]) for i in range(len(od["path"]) - 1)]
-                    fig3, ax3 = plt.subplots(figsize=(10, 6))
-                    nx.draw(G, pos, node_color=node_colors, ax=ax3)
-                    nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=10, ax=ax3)
-                    nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color='red', width=2, ax=ax3)
-                    st.pyplot(fig3)
-
-            # Leyenda
-            with st.expander("ℹ Leyenda de colores"):
-                st.markdown("""
-                - 🥚 **Naranja**: Almacenamiento  
-                - 🔵 **Azul**: Recarga  
-                - 🥾 **Verde**: Cliente  
-                - 🔴 **Rojo**: Ruta calculada
-                """)
+            # 9) Renderiza el mapa en Streamlit
+            st_folium(m, width=800, height=600)
 
         # ------------------------
        
