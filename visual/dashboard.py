@@ -172,56 +172,38 @@ def run_dashboard():
                 - 🔴 **Rojo**: Ruta calculada
                 """)
 
-    # Pestaña de clientes y órdenes
+        # ------------------------
+    # PESTAÑA 3: Clients & Orders
+    # ------------------------
     with p3:
         st.subheader("📑 Clientes y Órdenes")
 
-            # Verificar simulación
         if "sim" not in st.session_state:
             st.info("Ejecuta primero la simulación en la pestaña 'Run Simulation'.")
         else:
             sim = st.session_state.sim
 
-            # 1) Tabla de clientes registrados
-            st.markdown("### 👤 Clientes Registrados")
-            client_rows = []
-            for v in sim.order_simulator.clients:
-                elem = v.element()
-                client_rows.append({
-                    "Cliente ID": elem["id"],
-                    "Cantidad de ordenes": 0
+            # Lista de clientes
+            st.markdown("### 👤 Lista de Clientes")
+            for cliente in sim.clients.values():
+                st.json(cliente.to_dict())
+
+            # Lista de órdenes
+            st.markdown("### 📦 Lista de Órdenes")
+            for orden in sim.orders.values():
+                st.json({
+                    "order_id": orden.order_id,
+                    "cliente": orden.client.name,
+                    "cliente_id": orden.client.client_id,
+                    "origen": orden.origin,
+                    "destino": orden.destination,
+                    "status": orden.status,
+                    "fecha_creación": orden.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fecha_entrega": orden.delivered_at.strftime("%Y-%m-%d %H:%M:%S") if orden.delivered_at else "—",
+                    "prioridad": orden.priority,
+                    "costo": orden.cost
                 })
-            st.dataframe(client_rows, use_container_width=True)
 
-            # 2) Resumen de órdenes por cliente
-            st.markdown("### 📦 Órdenes Totales por Cliente")
-            counts = {}
-            for order in sim.orders.values():
-                cid = order["dest"]
-                counts[cid] = counts.get(cid, 0) + 1
-
-            summary = []
-            for v in sim.order_simulator.clients:
-                cid = v.element()["id"]
-                summary.append({
-                    "Cliente ID": cid,
-                    "Tipo de Orden": "Entrega",
-                    "Órdenes Asociadas": counts.get(cid, 0)
-                })
-            st.dataframe(summary, use_container_width=True)
-
-            # 3) Detalle interactivo para un cliente
-            st.markdown("### 🔍 Detalle de Órdenes por Cliente")
-            cliente_sel = st.selectbox(
-                "Selecciona Cliente ID", 
-                sorted(counts.keys()), 
-                help="Muestra todas las órdenes entregadas a este cliente"
-            )
-            detalle = [o for o in sim.orders.values() if o["dest"] == cliente_sel]
-            if detalle:
-                st.table(detalle)
-            else:
-                st.warning(f"El cliente {cliente_sel} no ha recibido órdenes.")
     
     with p4:
         st.subheader("📈 Análisis de Rutas")
@@ -380,3 +362,5 @@ def run_dashboard():
             ax_bar.set_title("Visitas por Nodo")
             ax_bar.legend()
             st.pyplot(fig_bar)
+
+
