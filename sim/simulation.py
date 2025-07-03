@@ -20,6 +20,26 @@ class Simulation:
         self.route_tracker = RouteTracker()
         self.route_optimizer = RouteOptimizer(self.route_tracker, self.route_manager)
         self.order_simulator = OrderSimulator(self.graph, self.route_manager, self.route_tracker, self.route_optimizer)
+        
+    def create_order_from_route(self, origin_id: int, dest_id: int, path_info: dict) -> str:
+        """
+        Crea una orden usando la información de ruta calculada
+        y la almacena en el diccionario self.orders.
+        Devuelve el ID de la orden.
+        """
+        oid = f"O{self.order_count}"
+        self.orders[oid] = {
+            "origin": origin_id,
+            "dest": dest_id,
+            "path": path_info.get("path", []),
+            "cost": path_info.get("total_cost", 0),
+            "recharges": path_info.get("recharge_stops", [])
+        }
+        self.order_count += 1
+        # Registrar ruta en el tracker si es posible
+        if hasattr(self.route_tracker, 'record_route'):
+            self.route_tracker.record_route(self.orders[oid]["path"])
+        return oid
 
     '''def find_route_with_recharge(self, origin_id, dest_id, max_autonomy=50):
         origin = self.graph.get_vertex(origin_id)
