@@ -173,7 +173,9 @@ def run_dashboard():
                 """)
 
         # ------------------------
+       
     # PESTAÑA 3: Clients & Orders
+    
     # ------------------------
     with p3:
         st.subheader("📑 Clientes y Órdenes")
@@ -183,28 +185,36 @@ def run_dashboard():
         else:
             sim = st.session_state.sim
 
-            # Lista de clientes
+            # Lista de clientes (vértices que son clientes)
             st.markdown("### 👤 Lista de Clientes")
-            for cliente in sim.clients.values():
-                st.json(cliente.to_dict())
+            clientes_data = []
+            for v in sim.graph.vertices():
+                if v.is_client:
+                    vid = v.element()["id"]
+                    total_ordenes = sum(1 for o in sim.orders.values() if o["dest"] == vid)
+                    clientes_data.append({
+                        "Cliente ID": vid,
+                        "Nombre": f"Cliente {vid}",
+                        "Tipo": "cliente",
+                        "Total de Órdenes": total_ordenes
+                    })
+            st.dataframe(clientes_data, use_container_width=True)
 
-            # Lista de órdenes
+            # Lista de órdenes registradas
             st.markdown("### 📦 Lista de Órdenes")
-            for orden in sim.orders.values():
-                st.json({
-                    "order_id": orden.order_id,
-                    "cliente": orden.client.name,
-                    "cliente_id": orden.client.client_id,
-                    "origen": orden.origin,
-                    "destino": orden.destination,
-                    "status": orden.status,
-                    "fecha_creación": orden.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    "fecha_entrega": orden.delivered_at.strftime("%Y-%m-%d %H:%M:%S") if orden.delivered_at else "—",
-                    "prioridad": orden.priority,
-                    "costo": orden.cost
+            ordenes_data = []
+            for oid, orden in sim.orders.items():
+                ordenes_data.append({
+                    "ID": oid,
+                    "Cliente ID": orden["dest"],
+                    "Origen": orden["origin"],
+                    "Destino": orden["dest"],
+                    "Estado": orden.get("status", "Desconocido"),
+                    "Prioridad": orden.get("priority", "Normal"),
+                    "Costo Total": orden["cost"]
                 })
+            st.dataframe(ordenes_data, use_container_width=True)
 
-    
     with p4:
         st.subheader("📈 Análisis de Rutas")
 
