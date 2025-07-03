@@ -126,18 +126,43 @@ def run_dashboard():
             mst_btn       = col2.button("🌲 Show MST")
             complete_btn  = col3.button("✅ Complete Delivery and Create Order")
 
-            # 3) Crea el mapa centrado en Temuco
+            # 3) Al hacer click, guardamos en session_state
+            if calculate_btn:
+                method = "dijkstra" if algoritmo == "Dijkstra" else "floyd-warshall"
+                res = sim.route_manager.find_route_with_recharge(
+                    origen, destino, battery_limit=50, method=method
+                )
+                if res:
+                    st.session_state["last_route"] = res
+                else:
+                    st.error("No se encontró ruta válida.")
+
+            if mst_btn:
+                st.session_state["show_mst"] = True
+
+            if complete_btn:
+                if "last_route" not in st.session_state:
+                    st.error("Primero calcula una ruta válida.")
+                else:
+                    oid = sim.create_order_from_route(
+                        origen, destino, st.session_state["last_route"]
+                    )
+                    st.success(f"Orden {oid} creada: {origen} → {destino}")
+
+            # 4) Construye el mapa base
             m = folium.Map(location=[-38.7359, -72.5904], zoom_start=13)
 
-            # 4) Dibuja todos los nodos
-            def draw_vertex(v):
+            # Dibuja nodos
+            for v in graph.vertices():
                 lat, lon = v.element()["lat"], v.element()["lon"]
-                role = ("almacenamiento" if v.is_warehouse 
-                        else "recarga" if v.is_recharge 
+                role = ("almacenamiento" if v.is_warehouse
+                        else "recarga" if v.is_recharge
                         else "cliente")
-                color = {"almacenamiento":"orange","recarga":"blue","cliente":"green"}[role]
+                color = {"almacenamiento": "orange",
+                        "recarga": "blue",
+                        "cliente": "green"}[role]
                 folium.CircleMarker(
-                    location=[lat, lon],
+                    [lat, lon],
                     radius=6,
                     color=color,
                     fill=True,
@@ -145,86 +170,53 @@ def run_dashboard():
                     popup=f"{v.element()['id']} ({role})"
                 ).add_to(m)
 
-            for v in graph.vertices():
-                draw_vertex(v)
-
-            # 5) Dibuja todas las aristas
+            # Dibuja aristas
             for edge in graph.edges():
                 u, v = edge.endpoints()
-                data = edge.cost()
-
+                cost = edge.cost()
                 lat1, lon1 = u.element()["lat"], u.element()["lon"]
                 lat2, lon2 = v.element()["lat"], v.element()["lon"]
                 folium.PolyLine(
-                    locations=[(lat1, lon1), (lat2, lon2)],
+                    [(lat1, lon1), (lat2, lon2)],
                     weight=2,
                     opacity=0.6,
-                    dash_array=None,
-                    popup=f"Cost: {data}"
+                    popup=f"Cost: {cost}"
                 ).add_to(m)
 
-            # 6) Si piden MST
-            if mst_btn:
-                # Obtener lista de aristas del MST (Kruskal)
+            # 5) Si show_mst está en sesión, dibuja el MST
+            if st.session_state.get("show_mst"):
                 mst_edges = sim.route_optimizer.kruskal_mst(graph)
                 for u, v, w in mst_edges:
                     lat1, lon1 = u.element()["lat"], u.element()["lon"]
                     lat2, lon2 = v.element()["lat"], v.element()["lon"]
                     folium.PolyLine(
-                        locations=[(lat1, lon1), (lat2, lon2)],
+                        [(lat1, lon1), (lat2, lon2)],
                         weight=3,
-                        opacity=0.4,
                         color="gray",
                         dash_array="5,5",
-                        popup=f"MST Edge {u.element()['id']}–{v.element()['id']} (w={w})"
+                        popup=f"MST {u.element()['id']}–{v.element()['id']} (w={w})"
                     ).add_to(m)
 
-            # 7) Si piden ruta
-            if calculate_btn:
-                # Eligir método
-                if algoritmo == "Dijkstra":
-                    res = sim.route_manager.find_route_with_recharge(
-                        origen, destino, battery_limit=50, method="dijkstra"
-                    )
-                else:
-                    res = sim.route_manager.find_route_with_recharge(
-                        origen, destino, battery_limit=50, method="floyd-warshall"
-                    )
+            # 6) Si last_route está en sesión, dibuja la ruta roja y resumen
+            if "last_route" in st.session_state:
+                route_info = st.session_state["last_route"]
+                path = route_info["path"]
+                for i in range(len(path) - 1):
+                    u = graph.get_vertex(path[i])
+                    v = graph.get_vertex(path[i + 1])
+                    folium.PolyLine(
+                        [
+                            (u.element()["lat"], u.element()["lon"]),
+                            (v.element()["lat"], v.element()["lon"])
+                        ],
+                        color="red",
+                        weight=4
+                    ).add_to(m)
+                st.markdown(f"**Ruta:** {' → '.join(map(str, path))}")
+                st.markdown(f"**Costo total:** {route_info['total_cost']}")
+                st.markdown(f"**Recargas:** {route_info['recharge_stops'] or 'Ninguna'}")
 
-                if not res:
-                    st.error("No se encontró ruta válida con la batería actual y estaciones.")
-                else:
-                    path, cost, recs = res["path"], res["total_cost"], res["recharge_stops"]
-                    # Dibuja ruta en rojo
-                    for i in range(len(path)-1):
-                        u = graph.get_vertex(path[i])
-                        v = graph.get_vertex(path[i+1])
-                        folium.PolyLine(
-                            locations=[
-                                (u.element()["lat"], u.element()["lon"]),
-                                (v.element()["lat"], v.element()["lon"])
-                            ],
-                            weight=4,
-                            color="red",
-                            popup=f"{path[i]}→{path[i+1]}"
-                        ).add_to(m)
-                    # Informe de vuelo
-                    st.markdown(f"*Ruta:* {' → '.join(map(str,path))}")
-                    st.markdown(f"*Distancia/Costo total:* {cost}")
-                    st.markdown(f"*Paradas recarga:* {recs if recs else 'Ninguna'}")
-                    # Guardar resultado en sesión para completar
-                    st.session_state.last_route = res
-
-            # 8) Completar entrega
-            if complete_btn:
-                if "last_route" not in st.session_state:
-                    st.error("Primero calcula una ruta válida antes de crear la orden.")
-                else:
-                    lr = st.session_state.last_route
-                    oid = sim.create_order_from_route(origen, destino, lr)
-                    st.success(f"Orden {oid} creada: {origen} → {destino}")
-
-            # 9) Renderiza el mapa en Streamlit
+            # 7) Renderiza el mapa en Streamlit
             st_folium(m, width=800, height=600)
 
         # ------------------------
