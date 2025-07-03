@@ -11,6 +11,7 @@ from RouteTracker import RouteTracker
 from RouteOptimizer import RouteOptimizer
 from OrderSimulator import OrderSimulator
 import folium
+import requests
 
 def run_dashboard():
     st.set_page_config(layout="wide")
@@ -27,6 +28,29 @@ def run_dashboard():
             if n_nodes < 10 or m_edges < n_nodes - 1:
                 st.error("El número de nodos debe ser al menos 10 y el número de aristas al menos n_nodes - 1.")
                 return
+
+            # Debes serializar el grafo a un formato que pueda enviarse por HTTP, como JSON.
+            # Primero, implementa un método en tu clase Graph para convertir el grafo a un diccionario serializable.
+            # Ejemplo de serialización básica:
+
+            def serialize_graph(g):
+                vertices = []
+                for v in g.vertices():
+                    data = v.element().copy()
+                    data["id"] = v.element()["id"]
+                    data["almacen"] = v.element().get("almacen", False)
+                    data["cliente"] = v.element().get("cliente", False)
+                    data["estacion"] = v.element().get("estacion", False)
+                    vertices.append(data)
+                edges = []
+                for e in g.edges():
+                    u, v = e.endpoints()
+                    edges.append({
+                        "from": u.element(),
+                        "to": v.element(),
+                        "cost": e.cost()
+                    })
+                return {"vertices": vertices, "edges": edges}
 
             g = Graph()
             vertices = []
@@ -70,8 +94,18 @@ def run_dashboard():
                     remaining_edges -= 1
                 attempts += 1
 
+            # Serializa el grafo y envíalo a la API
+            #grafo_json = serialize_graph(g)
+            '''r = requests.post(
+                "http://localhost:8000/start_simulation",
+                json={"grafo": grafo_json}
+            )
+            if r.status_code != 200:
+                st.error(f"Error al iniciar la simulación: {r.status_code}")
+                st.error(f"Detalles del error: {r.text}")
+                return'''
+
             st.session_state.sim = Simulation(g)
-            st.success(f"Grafo creado con {n_nodes} nodos y {m_edges} aristas.")
 
             for _ in range(n_orders):
                 order_simulator = OrderSimulator(g, st.session_state.sim.route_manager, st.session_state.sim.route_tracker, st.session_state.sim.route_optimizer)
